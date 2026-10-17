@@ -1,4 +1,7 @@
 *
+!requirements.txt
 !kit.py
 !policy.py
 !Dockerfile
+!wheelhouse/
+!wheelhouse/**

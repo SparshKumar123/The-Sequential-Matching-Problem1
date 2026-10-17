@@ -1,89 +1,87 @@
-# The Sequential Matching Problem
+# VOUCH-OPT — Sequential Matching Submission
 
-**Final participant release 1.0.0 | Vouchsafe | 5 October 2026**
+This is a ready-to-upload project package based on the official public release of **The One Introduction Problem**. VOUCH-OPT applies the kit's reciprocal hard-eligibility gate, a deterministic clarification heuristic, a reservation value and weighted general-graph matching. Every profile and outcome in the kit is synthetic; these evaluations do not establish real-world relationship outcomes.
 
-Build a policy that decides who to introduce, when to wait and what to clarify, using incomplete reciprocal preferences and delayed feedback. Every person, conversation and outcome in this kit is synthetic.
+The base kit is pinned to source commit `a8e26b35118cfa8e886a02f93984923e43ab64f6`. The supplied Round 1 research note is retained at `docs/reference/VOUCH-OPT_Round1_Research_Note.pdf`.
 
-## Start here
+## Quick start
 
-1. Read the [final problem statement](PROBLEM_STATEMENT.md) or [download the PDF](docs/PROBLEM_STATEMENT.pdf).
-2. Download this repository with **Code → Download ZIP**, or clone it. The full dataset is already in `data/`; no Supabase account, API key or separate download is required.
-3. Install Python 3.10 or later. Open a terminal in the extracted repository folder and run:
+Requirements: Python 3.10+ (tested with Python 3.13); Docker is needed for the isolated container check. The pinned NetworkX and decorator wheels are included in `wheelhouse/`, so dependency installation and image builds do not need network access.
+
+```bash
+python -m pip install --no-index --find-links=wheelhouse -r requirements.txt
+python -m unittest -v
+python verify_data.py
+python evaluate.py --policy policy.py --seeds 101 --variants all --output results/quick.json
+```
+
+## Full experiments and dynamic report
+
+Run the same three public seeds on all six public scenario variants for the three supplied baselines, VOUCH-OPT, and the allocation ablation:
+
+```bash
+bash run_experiments.sh
+bash run_ablations.sh
+python generate_report.py
+```
+
+The scripts retain the JSON output from every episode under `results/`. `generate_report.py` reads those results and regenerates `report.md` from their actual contents. It exits with an error if a required result is missing or any episode is invalid; it never inserts placeholder scores.
+
+The exact commands run by the scripts are:
 
 ```bash
 python -m unittest -v
 python verify_data.py
-python evaluate.py --seeds 101 --output results/first_run.json
+python evaluate.py --policy starter_policy.py --baseline greedy --seeds 101,102,103 --variants all --output results/greedy.json
+python evaluate.py --policy starter_policy.py --baseline no_asks --seeds 101,102,103 --variants all --output results/no_asks.json
+python evaluate.py --policy starter_policy.py --baseline random --seeds 101,102,103 --variants all --output results/random.json
+python evaluate.py --policy policy.py --seeds 101,102,103 --variants all --output results/vouchopt.json
+python evaluate.py --policy ablation_greedy_allocator.py --seeds 101,102,103 --variants all --output results/ablation_greedy_allocator.json
+python generate_report.py
 ```
 
-On Windows, use `py` instead of `python` if needed. On macOS/Linux, use `python3` if your Python executable has that name. The starter has no external Python dependencies. Results are written to the requested JSON file; scores measure this invented simulator only.
+The focused ablation changes only the allocator (global weighted matching vs. greedy edge selection); its asks, edge score and reservation rule are the same. Three seeds are a modest reproducible public run, not enough for strong statistical or superiority claims.
 
-## What is included
+## Policy and safeguards
 
-| File / folder | Purpose |
-|---|---|
-| [PROBLEM_STATEMENT.md](PROBLEM_STATEMENT.md) | Final challenge, ranking, resources, schedule and ownership rules |
-| [data/](data/) | 2,000 synthetic adults, ten disjoint pools and day-30 observable histories |
-| [data_manifest.json](data_manifest.json) | Pool counts, source seeds and train/validation/development-test split |
-| [docs/DATA_CONTRACT.md](docs/DATA_CONTRACT.md) | Every field, constraint and feedback rule |
-| [docs/POLICY_INTERFACE.md](docs/POLICY_INTERFACE.md) | Executable JSON request/response protocol |
-| [policy.py](policy.py) | Runnable greedy, no-clarification and random-feasible baselines |
-| [evaluate.py](evaluate.py) | 60-day episodes, 40-day follow-up, metrics and scenario-level score |
-| [build_public_data.py](build_public_data.py) | Rebuild public synthetic tables in a new folder |
-| [kit.py](kit.py) | Reproducible public simulator and reciprocal eligibility checks |
-| [organise.py](organise.py) | Prepare and grade 120 private episodes outside the public repo |
-| [docs/ORGANISER_RUNBOOK.md](docs/ORGANISER_RUNBOOK.md) | Complete assessment commands and ranking procedure |
-| [Dockerfile](Dockerfile) | Offline container packaging for assessed inference |
-| [docs/SUBMISSION.md](docs/SUBMISSION.md) | Complete research and build submission instructions |
-| [docs/INTEGRATION.md](docs/INTEGRATION.md) | Reusable adapter boundary for later Vouchsafe evaluation |
-| [docs/FAQ.md](docs/FAQ.md) | Common questions and communication policy |
-| [examples/baseline_results/](examples/baseline_results/) | Checked reference runs for all three baselines |
-| [examples/REPORT_GUIDE.md](examples/REPORT_GUIDE.md) | What a complete participant technical report must cover |
+- `policy.py`: custom policy; asks first, then uses the refreshed observations.
+- `starter_policy.py`: exact copy of the repository's supplied baseline adapter, used for baseline comparisons.
+- `kit.py`: authoritative public eligibility and simulator semantics.
+- Hard constraints, availability and repeat pairs are checked before an edge is added. Unknown or declined hard answers never become consent.
+- The ranking score is a shrunk soft-feature agreement score, not a success probability. Missing soft values are excluded.
+- General-graph maximum-weight matching uses pinned NetworkX 3.4.2.
+- No latent truth, simulator seed, future arrival or hidden outcome is read by the policy. Memory is returned unchanged; no filesystem state is needed.
 
-## Develop and compare
+## Container check
 
-Edit `policy.py`, keeping the JSON interface. Observe only the input state. Refreshing observations after clarification is handled by the evaluator. Policy memory is passed explicitly between calls and reset between episodes.
+After Docker is available:
 
 ```bash
-python evaluate.py --baseline greedy --seeds 101,102,103 --variants all --output results/greedy.json
-python evaluate.py --baseline no_asks --seeds 101,102,103 --variants all --output results/no_asks.json
-python evaluate.py --baseline random --seeds 101,102,103 --variants all --output results/random.json
+docker build -t sequential-policy:submission .
+python evaluate.py --image sequential-policy:submission --seeds 101 --variants all --output results/container_check.json
 ```
 
-The full commands take longer than the one-episode quick start. Public variants are `development`, `sparse`, `cold_start`, `delayed`, `shift`, and `drift`. Use your own declared training seeds. Keep the supplied six training pools, two validation pools and two development-test pools disjoint. Day-30 snapshots are not observations from earlier decisions.
+Container evaluation uses the official harness's offline, restricted runtime. The environment used to prepare this archive did not have Docker installed, so the Docker build and isolated container check remain to be run before the official submission. The Dockerfile and vendored wheels are present.
 
-To check container execution after installing Docker:
+## Upload to GitHub
+
+Create or open the intended public repository, extract this archive, and upload the extracted project contents (including `data/`, `results/`, `report.md`, `Dockerfile`, and `wheelhouse/`). For Git-based submission, commit the complete contents and pin the full 40-character commit SHA in the official Final submission issue. `results/` is ignored by the upstream starter's `.gitignore`; force-add the result JSON files when committing:
 
 ```bash
-docker build -t sequential-policy:1.0 .
-python evaluate.py --image sequential-policy:1.0 --seeds 101 --output results/container.json
+git add -f results/*.json
+git add README.md report.md policy.py Dockerfile requirements.txt wheelhouse
+git add .
+git commit -m "Submit VOUCH-OPT policy and public evaluation"
+git rev-parse HEAD
 ```
 
-Local subprocess mode is only for trusted development code. Assessed submissions use offline containers with no host evaluation files mounted. Private organiser worlds are intentionally absent from this public repository.
+Follow `docs/SUBMISSION.md` and the official issue template for the final submission. The public submission cutoff is 18 October 2026, 23:59 IST.
 
-To regenerate the public tables without changing the supplied data:
+## Dependencies and licences
 
-```bash
-python build_public_data.py --output ../rebuilt-public-data
-```
-
-The new folder must not already exist. The generator uses only invented data and public seeds. Do not use seed reconstruction inside an evaluated policy.
-
-## Submit and ask questions
-
-Teams: **1–4 participants**.
-
-| Milestone | Date and time (IST) |
-|---|---|
-| Round 1 research submission closes | 9 October 2026, 23:59 |
-| Round 1 results announced by | 11 October 2026, 22:00 |
-| Round 2 build starts | 12 October 2026 |
-| Final build submission closes | 18 October 2026, 23:59 |
-
-**Round 1:** submit the research note through a Google Form. The organisers will release the link soon through [Discord](https://discord.gg/GwZdY54Gq) and [the submission guide](docs/SUBMISSION.md#research-submission). GitHub Issues are not the research submission route.
-
-**Round 2:** use the [Final submission](https://github.com/RomeoJulietLove/The-Sequential-Matching-Problem/issues/new?template=final_submission.yml) issue form by the final deadline. Provide the immutable submitted version and required report/results. Use [Question](https://github.com/RomeoJulietLove/The-Sequential-Matching-Problem/issues/new?template=question.yml) for technical questions. Never post personal data, access codes or credentials in public issues.
-
-This repository and public Issues are the shared technical communication hub. Event announcements and reminders are shared through [the IITM Discord server](https://discord.gg/GwZdY54Gq). Questions answered here are visible to every team. See [CHANGELOG.md](CHANGELOG.md) for release corrections.
-
-The [starter-code permission](LICENSE) and [synthetic-data permission](DATA_LICENSE.md) permit reuse of the supplied kit. Students retain ownership of their own work; participation does not grant Vouchsafe a commercial licence to submissions. Later use requires a separate agreement.
+- Official starter code and public synthetic data: licences and terms in `LICENSE` and `DATA_LICENSE.md`.
+- NetworkX 3.4.2: BSD-3-Clause.
+- decorator 5.2.1: BSD-2-Clause.
+- Full bundled dependency licence texts: `THIRD_PARTY_NOTICES.md` and `third_party_licenses/`.
+- No pretrained model, external participant data, training run or GPU is used.
+- Coding assistance: Notion AI and a local coding environment; all reported metrics are produced by the included public evaluator.
